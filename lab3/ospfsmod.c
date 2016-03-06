@@ -931,18 +931,23 @@ remove_block(ospfs_inode_t *oi)
 		return 0;
 	}
 	if(indir2_index(n - 1) == 0){ //if we use a doubly indirect block
-		if(oi->oi_indirect2 == 0) //but if the doubly indirect block doesn't exist...ERROR
+		if(oi->oi_indirect2 == 0){ //but if the doubly indirect block doesn't exist...ERROR
+			eprintk("-EIO inside of remove_block\n");
 			return -EIO; 
+		}
 		indir2_block = (uint32_t *)ospfs_block(oi->oi_indirect2);
 		if(indir2_block[indir_index(n-1)] == 0) {//but if the indirect block inside the doubly indirect block doesn't exist...ERROR //is this necessarily correct?
 			eprintk("%d\n", indir_index(n-1));
 			eprintk("%d\n", indir2_block[indir_index(n-1)]);
+			eprintk("-EIO inside of remove_block\n");
 			return -EIO;
 		}
 
 		indir_block = (uint32_t *)ospfs_block(indir2_block[indir_index(n-1)]);
-		if(indir_block[direct_index(n - 1)] == 0) //but if the direct block inside the doubly indirect block doesn't exist...ERROR
+		if(indir_block[direct_index(n - 1)] == 0) { //but if the direct block inside the doubly indirect block doesn't exist...ERROR
+			eprintk("-EIO inside of remove_block\n");
 			return -EIO;
+		}
 		free_block(indir_block[direct_index(n - 1)]); //free the direct block
 		indir_block[direct_index(n - 1)] = 0;
 
@@ -959,8 +964,10 @@ remove_block(ospfs_inode_t *oi)
 		return 0;
 	}
 	else if(indir_index(n - 1) == 0){ //if we use indirect block
-		if(oi->oi_indirect == 0)
+		if(oi->oi_indirect == 0){
+			eprintk("-EIO inside of remove_block\n");
 			return -EIO;
+		}
 		indir_block = (uint32_t *)ospfs_block(oi->oi_indirect);
 
 		free_block(indir_block[direct_index(n - 1)]);
@@ -1131,8 +1138,10 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 	/* EXERCISE: Your code here */
 
 	size_t file_size = oi->oi_size; //this is equal to number of bytes in the file
-	if(*f_pos + count < *f_pos) //no negative counts or overflow allowed
+	if(*f_pos + count < *f_pos){ //no negative counts or overflow allowed
+		eprintk("-EIO inside of ospfs_read 1\n");
 		return -EIO;
+	}
 	if((*f_pos + count) > file_size) //if count + current fpos starting at our current file position is greater than our file size, set count to the difference
 		count = (file_size - *f_pos);
 	if(*f_pos >= file_size) //if our position is not within the file
@@ -1146,6 +1155,7 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 
 		// ospfs_inode_blockno returns 0 on error
 		if (blockno == 0) {
+			eprintk("-EIO inside of ospfs_read 2\n");
 			retval = -EIO;
 			goto done;
 		}
@@ -1220,8 +1230,10 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 	if(filp->f_flags & O_APPEND){
 		*f_pos = oi->oi_size;
 	}
-	if(*f_pos + count < *f_pos) //no negative counts or overflows allowed
+	if(*f_pos + count < *f_pos){ //no negative counts or overflows allowed
+		eprintk("-EIO inside of ospfs_write\n");
 		return -EIO;
+	}
 	if(*f_pos + count >= oi->oi_size){
 		retval = change_size(oi, (*f_pos + count));
 		if(retval < 0)
@@ -1235,6 +1247,7 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 		char *data;
 
 		if (blockno == 0) {
+			eprintk("-EIO inside of ospfs_write\n");
 			retval = -EIO;
 			goto done;
 		}
@@ -1339,8 +1352,10 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 	uint32_t offset, r;
 	ospfs_direntry_t *od;
 
-	if(dir_oi->oi_ftype != OSPFS_FTYPE_DIR) //if file passed to us is not a directory
+	if(dir_oi->oi_ftype != OSPFS_FTYPE_DIR){ //if file passed to us is not a directory
+		eprintk("-EIO inside of create_blank_direntry\n");
 		return ERR_PTR(-EIO);
+	}
 
 	for(offset = 0; offset < dir_oi->oi_size; offset += OSPFS_DIRENTRY_SIZE){
 		od = ospfs_inode_data(dir_oi, offset);
@@ -1403,12 +1418,18 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 	dir_oi = ospfs_inode(dir->i_ino); //pull the relevant directory inode from our inode blocks
 	src_dir_oi = ospfs_inode(src_dentry->d_inode->i_ino); //pull relevant source directory inode from our inode blocks
 
-	if(dir_oi == 0) //illegal inode
+	if(dir_oi == 0){ //illegal inode
+		eprintk("-EIO inside of ospfs_link\n");
 		return -EIO;
-	if(dir_oi->oi_ftype != OSPFS_FTYPE_DIR) //not a directory
+	}
+	if(dir_oi->oi_ftype != OSPFS_FTYPE_DIR){ //not a directory
+		eprintk("-EIO inside of ospfs_link\n");
 		return -EIO;
-	if((src_dir_oi->oi_nlink + 1) == 0) //maximum amount of hard links already made, overflow to 0 on uint32_t
+	}
+	if((src_dir_oi->oi_nlink + 1) == 0){ //maximum amount of hard links already made, overflow to 0 on uint32_t
+		eprintk("-EIO inside of ospfs_link\n");
 		return -EIO;
+	}
 
 	if(dst_dentry->d_name.len > OSPFS_MAXNAMELEN)
 		return -ENAMETOOLONG;
@@ -1423,6 +1444,7 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 		return PTR_ERR(new_direntry);
 	}
 	if(new_direntry == 0){
+		eprintk("-EIO inside of ospfs_link\n");
 		return -EIO;
 	}
 
@@ -1490,9 +1512,11 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	ospfs_inode_t *ino_temp = 0;
 	ospfs_direntry_t *direntry_temp = 0;
 
+	eprintk("creating a new file!\n");
 
 	if(dir_oi->oi_ftype != OSPFS_FTYPE_DIR){ //if directory passed in isn't actually a directory
 		return -EIO;
+		eprintk("-EIO inside of ospfs_link\n");
 	}
 	if(dentry->d_name.len > OSPFS_MAXNAMELEN){ //if name passed in is too long
 		return -ENAMETOOLONG;
@@ -1507,6 +1531,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	}
 	ino_temp = ospfs_inode(entry_ino);
 	if(ino_temp == 0){
+		eprintk("-EIO inside of ospfs_link\n");
 		return -EIO;
 	}
 	//initialize all values to correspond to a new file
@@ -1586,8 +1611,10 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	if(entry_ino == 0)
 		return -ENOSPC;
 	new_symlink = (ospfs_symlink_inode_t *)ospfs_inode(entry_ino);
-	if(new_symlink == 0)
+	if(new_symlink == 0){
+		eprintk("-EIO inside of ospfs_symlink\n");
 		return -EIO;
+	}
 
 	//set the values of new_symlink
 	new_symlink->oi_size = strlen(symname);
