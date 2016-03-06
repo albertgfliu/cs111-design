@@ -31,14 +31,13 @@ This design problem asks you to design a mechanism to test file system robustnes
 
 **Goal 4:** If the variable is 0, then the file system has "crashed": every write to disk data should silently fail. That is, any time that your OSPFS code writes to disk, whether in a data block, a superblock, an inode block, or whatever, the write should be ignored.
 
-**Result 4:** Implement this now... report results back later. Find where blocks are DIRECTLY being modified, not where we call functions that modify blocks.
-
-Did NOT add silent crashes to modifying the bitmap, i.e. allocate_block() and free_block(). We did not consider the bitmap a "block". They will not be called anyways during a crash, as add_block() and remove_block(), the only two functions that call allocate_block() and free_block(), will silently fail anyways.
-
-Functions that were modified: ospfs_unlink() since it modifies od->ino and oi->oinlink, which are in directory and inode blocks respectively, add_block() and remove_block() since those modify data blocks. To have add_block() and remove_block() "silently" fail, the size member variable of the corresponding inode was still modified. This enables programs like cp believe that it succeeded. ospfs_link(), ospfs_create(), and ospfs_symlink() were also modified so that it would give an impression of success (but not necessarily call any Linux inode linking).
+**Result 4:** Functions that were modified: ospfs_unlink() since it modifies od->ino and oi->oinlink, which are in directory and inode blocks respectively, add_block() and remove_block() since those modify data blocks. To have add_block() and remove_block() "silently" fail, the size member variable of the corresponding inode was still modified. This enables programs like cp believe that it succeeded. ospfs_link(), ospfs_create(), and ospfs_symlink() were also modified so that it would give an impression of success (but not necessarily call any Linux inode linking).
 
 Functions that are related to writing but were not modified: change_size() since it does not directly modify any data blocks. It just calls helper functions add_block() and remove_block(), which do directly modify blocks. Those two will give the illusion to change_size() that change_size() executed successfully. Same concept with create_blank_direntry, where it calls add_block() to add a block to the directory.
 
+Did NOT add silent crashes to modifying the bitmap, i.e. allocate_block() and free_block(). We did not consider the bitmap a "block". They will not be called anyways during a crash, as add_block() and remove_block(), the only two functions that call allocate_block() and free_block(), will silently fail anyways.
+
+There were significant difficulties in getting silent failures to simulate a crash, since the code already had stages of error checking and robustness present.
 
 **Goal 5:** If the variable is GREATER than 0, then the variable should be decremented by 1 for every write to a different block. Thus, after nwrites_to_crash writes, the OSPFS will "crash".
 
@@ -48,7 +47,7 @@ Functions that are related to writing but were not modified: change_size() since
 
 ##Results (Find bugs)
 
-This list of bugs is by no means exhaustive, merely the ones we have selected to demonstrate.
+This list of bugs is by no means exhaustive, merely the ones we have selected to demonstrate. They are in the bug#-test.sh scripts. 
 
 **Bug 1:** OSPFS runs out of space before it should
 
@@ -58,16 +57,40 @@ This list of bugs is by no means exhaustive, merely the ones we have selected to
 
 How to test: 
 
-	#write lots of blocks to the point the device has no space left, leaving test/yes.txt with a couple megabytes of data
-	yes | head -n 9999999999 > test/yes.txt
+	#! /bin/bash
+	wd=.
+
+	#verify everything is working correctly
+	$wd/lab3-tester.pl
+
+	#create a huge file
+	echo "yes | head -n 9999999 > test/yes.txt"
+	yes | head -n 9999999 > test/yes.txt
+
+	#check contents of directory
+	echo "ls -l test"
+	ls -l test
+
 	#make it crash
-	./ioctl-nwrite 10
+	echo "$wd/ioctl-nwrite 10"
+	$wd/ioctl-nwrite 10
+
 	#remove it, making test/yes.txt "disappear" silently
+	echo "rm test/yes.txt"
 	rm test/yes.txt
+
+	#check that it's gone
+	echo "ls -l test"
+	ls -l test
+
 	#uncrash it
-	./ioctl-nwrite -1
+	echo "$wd/ioctl-nwrite -1"
+	$wd/ioctl-nwrite -1
+
 	#write a small file and see that we get -ENOSPC, no space left on device!
-	yes | head -n 99999 > test/yes.txt
+	echo "yes | head -n 99999 > test/yes.txt"
+	yes | head -n 99999 > test/yes2.txt
+
 
 
 **Bug 2:** Files are not copied successfully
@@ -78,13 +101,18 @@ How to test:
 
 How to test:
 
+	#! /bin/bash
+
 	#make it crash soon
 	./ioctl-nwrite 5
+
 	#copy an image over
 	cp test/pokercats.gif test/newpokercats.gif
 	ls -l test
+
 	#uncrash it
 	./ioctl-nwrite -1
+
 	#see that the image can't be read
 	zgv test/newpokercats.gif
 
@@ -97,10 +125,14 @@ How to test:
 
 How to test:
 
+	#! /bin/bash
+
 	#make it crash asap
 	./ioctl-nwrite 0
+
 	#create a file
 	touch test/a.txt
+	
 	#see if it worked (which it did not, since it cannot "find" it since it was never linked to linux inode)
 	ls -l test
 
