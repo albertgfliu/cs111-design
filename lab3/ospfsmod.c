@@ -600,12 +600,20 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 		return -ENOENT;
 	}
 
-	od->od_ino = 0;
-	oi->oi_nlink--;
+	if(check_crashed() == 0)
+		goto done;
+
+	od->od_ino = 0; //write to ospfs_direntry
+
+	if(check_crashed() == 0)
+		goto done;
+
+	oi->oi_nlink--; //write to ospfs_inode
 
 	if((oi->oi_ftype != OSPFS_FTYPE_SYMLINK) && (oi->oi_nlink == 0)) //that is, if we are doing a hard link (linux behavior for unlinking hard links is to not delete data UNLESS link count drops to 0)
 		return change_size(oi, 0); //get rid of it, change_size will return 0 if it worked
 
+	done:
 	return 0;
 }
 
@@ -811,6 +819,9 @@ add_block(ospfs_inode_t *oi)
 	uint32_t *indir2_block;
 	uint32_t *dir_block;
 
+	if(check_crashed() == 0)
+		goto done;
+
 	if(n >= OSPFS_MAXFILEBLKS){ //self-comment: if file is already at maximum (or even larger!)
 		return -ENOSPC;
 	}
@@ -885,9 +896,8 @@ add_block(ospfs_inode_t *oi)
 		oi->oi_direct[direct_index(n)] = allocated[0];
 	}
 
-
+	done:
 	oi->oi_size = (oi->oi_size) + OSPFS_BLKSIZE;
-
 	return 0;
 }
 
@@ -925,6 +935,9 @@ remove_block(ospfs_inode_t *oi)
 
 	uint32_t *indir2_block;
 	uint32_t *indir_block;
+
+	if(check_crashed() == 0)
+		goto done;
 
 	//check if there is anything to remove
 	if(n <= 0){
@@ -988,6 +1001,10 @@ remove_block(ospfs_inode_t *oi)
 	}
 	eprintk("-EIO inside of remove_block\n");
 	return -EIO; // Replace this line
+
+	done:
+	oi->oi_size = (n - 1) * OSPFS_BLKSIZE;
+	return 0;
 }
 
 
