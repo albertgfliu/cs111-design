@@ -39,6 +39,8 @@ Did NOT add silent crashes to modifying the bitmap, i.e. allocate_block() and fr
 
 There were significant difficulties in getting silent failures to simulate a crash, since the code already had stages of error checking and robustness present.
 
+Silent failures were attempted to be achieved in all cases EXCEPT for where there were reads and linking to Linux inodes. All links to Linux inodes were skipped. Any reading made by the code was another level of robustness that would have to be broken if even finer-grained silent failures were desired.
+
 **Goal 5:** If the variable is GREATER than 0, then the variable should be decremented by 1 for every write to a different block. Thus, after nwrites_to_crash writes, the OSPFS will "crash".
 
 **Result 5:** This was implemented in check_crashed() as described in Result 3. We will only call check_crashed() when we wish to write to a block. When nwrites_to_crash is 1, check_crashed() will return 1, meaning that we can still write, but decrements it to 0 after returning 1. The next call to check_crashed() will then tell us that the file system is crashed by returning 0.
