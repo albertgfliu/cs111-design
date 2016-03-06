@@ -364,7 +364,7 @@ ospfs_ioctl(struct inode *inode, struct file *filp, unsigned int command_arg, un
 	
 long
 check_crashed(){
-	eprintk("current nwrites_to_crash: %ld\n", nwrites_to_crash);
+	//eprintk("current nwrites_to_crash: %ld\n", nwrites_to_crash);
 	return (nwrites_to_crash > 0) ? nwrites_to_crash-- : nwrites_to_crash;
 }
 
@@ -1263,12 +1263,18 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 		uint32_t n;
 		char *data;
 
+		int crash_status = check_crashed();
+
+		if(crash_status == 0)
+			goto skip1;
+
 		if (blockno == 0) {
 			eprintk("-EIO inside of ospfs_write\n");
 			retval = -EIO;
 			goto done;
 		}
 
+		skip1:
 		data = ospfs_block(blockno);
 
 		// Figure out how much data is left in this block to write.
@@ -1284,9 +1290,13 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 		if(n > count - amount)
 			n = count - amount;
 
+		if(crash_status == 0)
+			goto skip2;
+
 		if(copy_from_user(data + (*f_pos % OSPFS_BLKSIZE), buffer, n))
 			return -EFAULT;
 
+		skip2:
 		buffer += n;
 		amount += n;
 		*f_pos += n;
@@ -1465,11 +1475,16 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 		return -EIO;
 	}
 
+	if(check_crashed() == 0)
+		goto done;
+
 	new_direntry->od_ino = src_dentry->d_inode->i_ino;
 	memcpy(new_direntry->od_name, dst_dentry->d_name.name, dst_dentry->d_name.len);
 	new_direntry->od_name[dst_dentry->d_name.len] = '\0';
 
 	src_dir_oi->oi_nlink += 1;
+
+	done:
 	return 0;
 }
 
@@ -1531,9 +1546,12 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 
 	eprintk("creating a new file!\n");
 
+	if(check_crashed() == 0)
+		return 0;
+
 	if(dir_oi->oi_ftype != OSPFS_FTYPE_DIR){ //if directory passed in isn't actually a directory
-		return -EIO;
 		eprintk("-EIO inside of ospfs_link\n");
+		return -EIO;
 	}
 	if(dentry->d_name.len > OSPFS_MAXNAMELEN){ //if name passed in is too long
 		return -ENAMETOOLONG;
@@ -1614,6 +1632,9 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	/* EXERCISE: Your code here. */
 	ospfs_direntry_t *direntry_temp;
 	ospfs_symlink_inode_t *new_symlink;
+
+	if(check_crashed() == 0)
+		return 0;
 
 	if(dentry->d_name.len > OSPFS_MAXNAMELEN)
 		return -ENAMETOOLONG;
