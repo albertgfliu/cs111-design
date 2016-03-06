@@ -11,9 +11,9 @@
 # information you'd like us to know, please add it at the end of the file.
 
 # Partner 1
-Name: Albert Liu
-Student ID: 904167727
-Email: albertgfliu@ucla.edu
+Name: 
+Student ID: 
+Email: 
 
 # Partner 2 (if you're working in a team)
 Name: 
